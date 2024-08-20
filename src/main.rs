@@ -1,18 +1,17 @@
-fn main() {
-    let mut s = String::from("Hello World!");
-    let word = first_word(&s);
+use std::error::Error;
 
-    s.clear();
-    println!("{word}");
-}
+use bgapp::models::{auction, auction_item, price, user};
 
-fn first_word(s: &String) -> &str {
-    let bytes = s.as_bytes();
+fn main() -> Result<(), Box<dyn Error>> {
+    let user = user::generate_user();
+    let auction_item = auction_item::AuctionItem::new(String::from("Brass Birmingham"), &user);
+    let mut curr_auction = auction::Auction::new(
+        &auction_item,
+        price::Price::new(price::Currency::SGD, 10),
+        Some(5),
+        None,
+    );
 
-    for (i, &item) in bytes.iter().enumerate() {
-        if item == b' ' {
-            return &s[0..i];
-        }
-    }
-    &s[..]
+    let bid = auction::Bid::new(&user, price::Price::new(price::Currency::SGD, 10));
+    Ok(curr_auction.place_bid(bid)?)
 }
