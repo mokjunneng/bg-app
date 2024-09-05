@@ -1,33 +1,81 @@
-use std::error::Error;
-use std::net::SocketAddr;
+use std::{
+    collections::HashMap,
+    env,
+    io::Error as IoError,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+
+use futures_channel::mpsc::{unbounded, UnboundedSender};
+use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
+
 use tokio::net::{TcpListener, TcpStream};
-use tokio_websockets::{ServerBuilder, WebSocketStream};
+use tokio_tungstenite::tungstenite::protocol::Message;
+
+type Tx = UnboundedSender<Message>;
+type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let listener = TcpListener::bind("127.0.0.1:2000").await?;
-    println!("listening on port 2000");
+async fn main() -> Result<(), IoError> {
+    let addr = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
-    loop {
-        let (socket, addr) = listener.accept().await?;
-        println!("New connection from {addr:?}");
-        tokio::spawn(async move {
-            // Wrap the raw TCP stream into a websocket.
-            let ws_stream = ServerBuilder::new().accept(socket).await?;
+    let state = PeerMap::new(Mutex::new(HashMap::new()));
 
-            handle_connection(addr, ws_stream).await
-        });
+    // Create the event loop and TCP listener we'll accept connections on.
+    let try_socket = TcpListener::bind(&addr).await;
+    let listener = try_socket.expect("Failed to bind");
+    println!("Listening on: {}", addr);
+
+    // Spawn the handling of each connection in a separate task.
+    while let Ok((stream, addr)) = listener.accept().await {
+        tokio::spawn(handle_connection(state.clone(), stream, addr));
     }
+
+    Ok(())
 }
 
-async fn handle_connection(
-    addr: SocketAddr,
-    mut ws_stream: WebSocketStream<TcpStream>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    while let Some(Ok(msg)) = ws_stream.next().await {
-        if let Some(text) = msg.as_text() {
-            println!("Received message from client: {text}")
+async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr) {
+    println!("Incoming TCP connection from: {}", addr);
+
+    let ws_stream = tokio_tungstenite::accept_async(raw_stream)
+        .await
+        .expect("Error during the websocket handshake occurred");
+    println!("WebSocket connection established: {}", addr);
+
+    // Assuming we have enough system memory to run he channel
+    let (tx, rx) = unbounded();
+    peer_map.lock().unwrap().insert(addr, tx);
+
+    let (outgoing, incoming) = ws_stream.split();
+
+    let broadcast_incoming = incoming.try_for_each(|msg| {
+        println!(
+            "Received a message from {}: {}",
+            addr,
+            msg.to_text().unwrap()
+        );
+        let peers = peer_map.lock().unwrap();
+
+        // broadcast the message to everyone except ourselves.
+        let broadcast_recipients = peers
+            .iter()
+            .filter(|(peer_addr, _)| peer_addr != &&addr)
+            .map(|(_, ws_sink)| ws_sink);
+
+        for recp in broadcast_recipients {
+            recp.unbounded_send(msg.clone()).unwrap();
         }
-    }
-    Ok(())
+
+        future::ok(())
+    });
+
+    let receive_from_others = rx.map(Ok).forward(outgoing);
+
+    pin_mut!(broadcast_incoming, receive_from_others);
+    future::select(broadcast_incoming, receive_from_others).await;
+
+    println!("{} disconnected", &addr);
+    peer_map.lock().unwrap().remove(&addr);
 }
