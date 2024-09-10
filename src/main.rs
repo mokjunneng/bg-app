@@ -1,3 +1,5 @@
+pub mod prisma;
+
 use bgapp::request::parse_request;
 use std::fs;
 use std::io;
@@ -37,7 +39,7 @@ async fn handle_connection(stream: TcpStream) -> io::Result<()> {
 
     // Write response back to the stream,
     // and flush the stream to ensure the response is sent back to the client
-    let response = format!("{status_line}{contents}");
-    stream.try_write(response.as_bytes()).unwrap();
+    // let response = format!("{status_line}{contents}");
+    // stream.try_write(response.as_bytes()).unwrap();
     Ok(())
 }
