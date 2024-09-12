@@ -17,6 +17,10 @@ use bgapp::{
     services::messaging::MessagingService,
 };
 
+
+type ChatPool = HashMap<
+
+
 type Tx = UnboundedSender<Message>;
 
 type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
@@ -51,6 +55,7 @@ async fn main() -> Result<(), IoError> {
 
     // Spawn the handling of each connection in a separate task.
     while let Ok((stream, addr)) = listener.accept().await {
+        // Registers user in the chat pool
         tokio::spawn(handle_connection(
             peer_map.clone(),
             addr_map.clone(),
@@ -71,13 +76,11 @@ async fn handle_connection<'a>(
     messaging_service: AsyncMessagingService<'a>,
 ) {
     println!("Incoming TCP connection from: {}", addr);
-
     let ws_stream = tokio_tungstenite::accept_async(raw_stream)
         .await
         .expect("Error during the websocket handshake occurred");
     println!("WebSocket connection established: {}", addr);
 
-    // Assuming we have enough system memory to run the channel
     let (tx, rx) = unbounded();
     peer_map.lock().unwrap().insert(addr, tx);
 
