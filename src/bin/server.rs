@@ -17,10 +17,6 @@ use bgapp::{
     services::messaging::MessagingService,
 };
 
-
-type ChatPool = HashMap<
-
-
 type Tx = UnboundedSender<Message>;
 
 type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
