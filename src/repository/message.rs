@@ -1,4 +1,6 @@
-use prisma_client_rust::prisma_errors::query_engine::UniqueKeyViolation;
+use prisma_client_rust::{
+    bigdecimal::ToPrimitive, prisma_errors::query_engine::UniqueKeyViolation,
+};
 
 use crate::{
     dtos::message::MessageDto,
@@ -23,8 +25,8 @@ impl MessageRepository {
                     .iter()
                     .map(|message| {
                         message::create_unchecked(
-                            message.sender_id.clone(),
-                            message.recipient_id.clone(),
+                            message.sender_id.to_i32().unwrap(),
+                            message.recipient_id.to_i32().unwrap(),
                             message.content.clone(),
                             vec![],
                         )
@@ -35,9 +37,9 @@ impl MessageRepository {
             .await;
 
         match messages {
-            Ok(messages) => println!("Messages inserted"),
+            Ok(_messages) => println!("Messages inserted"),
             Err(error) if error.is_prisma_error::<UniqueKeyViolation>() => println!("Prisma error"),
-            Err(error) => println!("Other error occurred"),
+            Err(_error) => println!("Other error occurred"),
         }
     }
 }

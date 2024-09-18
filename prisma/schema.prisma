@@ -12,7 +12,7 @@ generator client {
 
 model Message {
   id           String @id @default(uuid())
-  sender_id    String
-  recipient_id String
+  sender_id    Int
+  recipient_id Int
   content      String
 }

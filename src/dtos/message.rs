@@ -3,8 +3,8 @@ use std::io::Read;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MessageDto {
-    pub sender_id: String,
-    pub recipient_id: String,
+    pub sender_id: u32,
+    pub recipient_id: u32,
     // TODO: Encode content semantics as type - e.g. @ mentions, reply to
     pub content: String,
     // created_at: String,
@@ -27,8 +27,8 @@ mod tests {
     #[test]
     fn serialize_message_dto_into_bytes() {
         let message_dto = MessageDto {
-            sender_id: "1".to_string(),
-            recipient_id: "2".to_string(),
+            sender_id: 1,
+            recipient_id: 2,
             content: "Hello back!".to_string(),
         };
         let buf = serde_json::to_vec(&message_dto).expect("Failed to serialize");
