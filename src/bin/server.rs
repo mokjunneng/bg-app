@@ -1,6 +1,6 @@
 use std::{env, io::Error as IoError, net::SocketAddr, sync::Arc};
 
-use futures_util::{future, pin_mut, SinkExt, StreamExt, TryStreamExt};
+use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -14,7 +14,7 @@ use bgapp::{
     services::messaging::{Command, MessagingService},
 };
 use tokio_stream::wrappers::BroadcastStream;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Error, Message};
 
 // TODO: Push notification service to alert new messages
 // TODO: DTO and model for message
@@ -102,41 +102,7 @@ async fn handle_connection(
         sender_rx = chat_session.get_user_receiving_channel(sender_id);
     }
 
-    // let broadcast_incoming = incoming.try_for_each(|msg| async move {
-    //     println!(
-    //         "Received a message from {}: {}",
-    //         &sender_id,
-    //         &msg.to_text().unwrap()
-    //     );
-    //
-    //     broadcast_targets.into_iter().for_each(|target| {
-    //         target
-    //             .send(Message::Binary(msg.clone().into_data()))
-    //             .unwrap();
-    //     });
-    //
-    //     let message: MessageDto =
-    //         serde_json::from_slice(&msg.into_data()).expect("Failed to deserialize message");
-    //
-    //     // save message
-    //     let (resp_tx, resp_rx) = oneshot::channel();
-    //     let cmd = Command::SaveMessage {
-    //         message,
-    //         resp: resp_tx,
-    //     };
-    //     commands_tx.send(cmd).await.unwrap();
-    //
-    //     let res = resp_rx.await;
-    //     println!("Received response from SaveMessage command: {:?}", res);
-    //     Ok(())
-    // });
-    let receive_from_others = BroadcastStream::new(sender_rx).try_for_each(|msg| {
-        let _ = outgoing.send(msg);
-        future::ok(())
-    });
-    let _ = receive_from_others.await;
-
-    while let msg = incoming.next().await.unwrap().unwrap() {
+    let broadcast_incoming = incoming.try_for_each(|msg| async {
         println!(
             "Received a message from {}: {}",
             &sender_id,
@@ -158,9 +124,20 @@ async fn handle_connection(
             message,
             resp: resp_tx,
         };
-        commands_tx.send(cmd).await.unwrap();
+        commands_tx.clone().send(cmd).await.unwrap();
 
         let res = resp_rx.await;
         println!("Received response from SaveMessage command: {:?}", res);
-    }
+        Ok(())
+    });
+
+    let receive_from_others = BroadcastStream::new(sender_rx)
+        .map(|msg| match msg {
+            Ok(result) => Ok(result),
+            Err(_e) => Err(Error::ConnectionClosed),
+        })
+        .forward(outgoing);
+
+    pin_mut!(broadcast_incoming, receive_from_others);
+    future::select(broadcast_incoming, receive_from_others).await;
 }
