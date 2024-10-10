@@ -3,17 +3,27 @@ use chrono::{DateTime, Utc};
 
 use crate::models::price::{Currency, Price};
 
-use super::user::{generate_user, User};
+use super::{
+    auction_item::AuctionItemId,
+    user::{generate_user, User},
+};
 
 pub struct Auction<'a> {
-    auction_item: &'a AuctionItem<'a>,
+    auction_item_id: AuctionItemId,
     bidding_rules: Vec<Box<dyn Rule>>,
     bids_received: Vec<Bid<'a>>,
     opening_bid_price: Price,
 }
+
+// Auction Aggregate
+// - Enforces the bidding rule invariants
+// - Publishes domain events -> BidPlaced,
+//
+// Creates a notification hook for users who bidded
+// - Publishes domain events to those users
 impl<'a> Auction<'a> {
     pub fn new(
-        auction_item: &'a AuctionItem,
+        auction_item_id: AuctionItemId,
         opening_bid_price: Price,
         minimum_bid_increment: Option<u32>,
         headshot_bid_amount: Option<u32>,
@@ -29,7 +39,7 @@ impl<'a> Auction<'a> {
             maximum_bid: headshot_bid_amount,
         };
         Self {
-            auction_item,
+            auction_item_id,
             bidding_rules: vec![
                 Box::new(same_currency_rule),
                 Box::new(min_bid_increment_rule),
@@ -156,8 +166,13 @@ mod tests {
     #[test]
     fn invalid_bid_less_than_opening_bid() {
         let user = generate_user();
-        let auction_item = AuctionItem::new(String::from("Brass Birmingham"), &user);
-        let mut auction = Auction::new(&auction_item, Price::new(Currency::SGD, 10), Some(5), None);
+        let auction_item = AuctionItem::new(1, String::from("Brass Birmingham"), &user);
+        let mut auction = Auction::new(
+            auction_item.get_id(),
+            Price::new(Currency::SGD, 10),
+            Some(5),
+            None,
+        );
 
         let invalid_bid = Bid::new(&user, Price::new(Currency::SGD, 8));
         assert!(auction.place_bid(invalid_bid).is_err());

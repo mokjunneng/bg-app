@@ -43,15 +43,11 @@ impl ChatSession {
         tx.subscribe()
     }
 
-    // Return all users' channels except the sender's channel to broadcast into
-    pub fn get_broadcast_channels(&self, user_id: UserId) -> Vec<broadcast::Sender<Message>> {
+    pub fn get_broadcast_channels(&self) -> Vec<broadcast::Sender<Message>> {
         let mut channels = vec![];
         for user in self.users.iter() {
-            // skip sender
-            if *user != user_id {
-                let (tx, _) = self.channels.get(&user).unwrap();
-                channels.push(tx.clone());
-            }
+            let (tx, _) = self.channels.get(&user).unwrap();
+            channels.push(tx.clone());
         }
         channels
     }

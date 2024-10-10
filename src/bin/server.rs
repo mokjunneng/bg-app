@@ -74,7 +74,7 @@ async fn handle_connection(
         .await
         .expect("Error during the websocket handshake occurred");
     println!("WebSocket connection established: {}", addr);
-    let (mut outgoing, mut incoming) = ws_stream.split();
+    let (outgoing, mut incoming) = ws_stream.split();
 
     let first_msg = incoming.next().await.unwrap().unwrap();
     let init_message: MessageDto = serde_json::from_slice(&first_msg.into_data()).unwrap();
@@ -83,6 +83,7 @@ async fn handle_connection(
     // TODO: Default registration of one on one chat now; Handle group chat too
     println!("Retrieving write lock to register chat");
 
+    // TODO: Investigate why cant use chat_session directly, and have to split the read
     // Get write lock to register chat
     let chat_session_id;
     {
@@ -98,7 +99,7 @@ async fn handle_connection(
     {
         let messaging_service_read_lock = messaging_service.read().await;
         let chat_session = messaging_service_read_lock.get_chat_session(chat_session_id);
-        broadcast_targets = chat_session.get_broadcast_channels(sender_id);
+        broadcast_targets = chat_session.get_broadcast_channels();
         sender_rx = chat_session.get_user_receiving_channel(sender_id);
     }
 
