@@ -28,7 +28,7 @@ impl AuctionAggregate {
         }
     }
 
-    pub fn execute(&self, cmd: Box<dyn Command>) {
+    pub fn execute(&mut self, cmd: Box<dyn Command>) {
         match cmd.get_type() {
             AuctionCommandType::CreateAuction => self.create_auction(),
             AuctionCommandType::StartAuction => self.start_auction(),
@@ -37,13 +37,25 @@ impl AuctionAggregate {
         }
     }
 
-    fn create_auction(&self) {}
+    fn add_domain_event(&mut self, event: AuctionEvent) {
+        self.domain_events.push(event);
+    }
 
-    fn start_auction(&self) {}
+    fn create_auction(&mut self) {
+        let event = AuctionEvent {
+            event_id: 1,
+            event_type: AuctionEventType::AuctionCreated,
+            auction_id: self.state.id,
+            bid: None,
+        };
+        self.add_domain_event(event);
+    }
 
-    fn close_auction(&self) {}
+    fn start_auction(&mut self) {}
 
-    fn offer_bid_for_auction(&self) {}
+    fn close_auction(&mut self) {}
+
+    fn offer_bid_for_auction(&mut self) {}
 }
 
 // All events added to aggregate's events collection are passed to the state projection logic
